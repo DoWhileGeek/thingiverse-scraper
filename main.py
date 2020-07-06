@@ -6,6 +6,10 @@ from selenium.webdriver.chrome.options import Options
 import requests
 import ray
 
+from models import Thing
+
+CHUNK_SIZE = 200
+
 ray.init()
 
 
@@ -70,7 +74,10 @@ def fetch(thing_id, headers):
     resp = requests.get(api_url, headers=headers)
 
     if resp.status_code == 404:
-        return {"id": thing_id, "state": "missing"}
+        return {"id": thing_id, "state": "missing", "name": None, "created_at": None}
+
+    if resp.status_code == 403:
+        return {"id": thing_id, "state": "forbidden", "name": None, "created_at": None}
 
     make_dir(f"things/{thing_id}")
 
@@ -90,7 +97,12 @@ def fetch(thing_id, headers):
         if "files" in task["filename"]:
             download_models(thing_id, resp.json())
 
-    return {"id": thing_id, "state": "success", "name": details["name"]}
+    return {
+        "id": thing_id,
+        "state": "success",
+        "name": details["name"],
+        "created_at": details["added"],
+    }
 
 
 def main():
@@ -98,10 +110,17 @@ def main():
 
     headers = get_headers()
 
-    chunks = list(range(1, 20))
+    query = Thing.select(Thing.id).order_by(Thing.id.desc()).limit(1)
+    last_id = query[0].id
+    print(last_id)
+
+    chunks = list(range(last_id + 1, last_id + 1 + CHUNK_SIZE))
+    print(chunks)
     futures = [fetch.remote(chunk, headers) for chunk in chunks]
 
-    print(ray.get(futures))
+    results = ray.get(futures)
+
+    Thing.insert_many(results).execute()
 
 
 main()
