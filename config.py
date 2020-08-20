@@ -1,0 +1,3 @@
+START_ID = 1
+END_ID = 20
+CHUNK_SIZE = 20

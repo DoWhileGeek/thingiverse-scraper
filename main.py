@@ -7,23 +7,10 @@ import requests
 import ray
 
 from models import Thing
+from config import START_ID, END_ID, CHUNK_SIZE
 
-START_ID = 1
-END_ID = 20
-CHUNK_SIZE = 20
 
 ray.init()
-
-
-def build_chunks(start, chunk_size, num_chunks):
-    chunks = []
-    cursor = start
-
-    for chunk in range(num_chunks):
-        chunks.append(list(range(cursor, cursor + chunk_size)))
-        cursor += chunk_size
-
-    return chunks
 
 
 def make_dir(path):
@@ -127,24 +114,6 @@ def fetch(thing_id, headers):
 
 
 def main():
-    make_dir("things")
-
-    headers = get_headers()
-
-    query = Thing.select(Thing.id).order_by(Thing.id.desc()).limit(1)
-    last_id = 1 or query[0].id
-    print(last_id)
-
-    chunks = list(range(last_id + 1, last_id + 1 + CHUNK_SIZE))
-    print(chunks)
-    futures = [fetch.remote(chunk, headers) for chunk in chunks]
-
-    results = ray.get(futures)
-
-    Thing.insert_many(results).execute()
-
-
-def chunky_main():
     make_dir("things")
 
     chunks = []
