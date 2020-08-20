@@ -1,5 +1,6 @@
 import os
 import json
+from math import ceil
 
 from seleniumwire import webdriver  # Import from seleniumwire
 from selenium.webdriver.chrome.options import Options
@@ -49,7 +50,6 @@ def download_images(thing_id, images):
         for version in image["sizes"]:
             if version["type"] == "display" and version["size"] == "large":
                 resp = requests.get(version["url"])
-                print(resp)
 
                 with open(path + "/" + version["url"].split("/")[-1], "wb+") as f:
                     f.write(resp.content)
@@ -69,6 +69,7 @@ def download_models(thing_id, models):
 
 @ray.remote
 def fetch(thing_id, headers):
+    print("stealing {}".format(thing_id))
     api_url = f"https://api.thingiverse.com/things/{thing_id}"
     tasks = [
         {"filename": "comments.json", "url": api_url + "/root-comments"},
@@ -113,12 +114,27 @@ def fetch(thing_id, headers):
     }
 
 
+def build_chunks():
+    existing_records = list(Thing.select(Thing.id))
+    existing_ids = [record.id for record in existing_records]
+
+    naive_range = list(range(START_ID, END_ID))
+
+    diff = list(set(naive_range) - set(existing_ids))
+
+    print(diff)
+
+    return [
+        diff[i * CHUNK_SIZE:(i * CHUNK_SIZE) + CHUNK_SIZE]
+        for i in range(ceil(len(diff) / CHUNK_SIZE))
+    ]
+
+
 def main():
     make_dir("things")
 
-    chunks = []
-    for chunk_start in range(START_ID, END_ID, CHUNK_SIZE):
-        chunks.append(list(range(chunk_start, chunk_start+CHUNK_SIZE)))
+
+    chunks = build_chunks()
 
     for chunk in chunks:
         headers = get_headers()
@@ -127,7 +143,7 @@ def main():
 
         results = ray.get(futures)
 
-        Thing.insert_many(results).execute()
+        Thing.insert_many(results).on_conflict_replace().execute()
 
 
-chunky_main()
+main()
