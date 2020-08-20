@@ -122,8 +122,6 @@ def build_chunks():
 
     diff = list(set(naive_range) - set(existing_ids))
 
-    print(diff)
-
     return [
         diff[i * CHUNK_SIZE:(i * CHUNK_SIZE) + CHUNK_SIZE]
         for i in range(ceil(len(diff) / CHUNK_SIZE))
