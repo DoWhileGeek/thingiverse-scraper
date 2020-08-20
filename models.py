@@ -1,4 +1,4 @@
-from peewee import *
+from peewee import SqliteDatabase, Model, IntegerField, TextField, DateTimeField
 import datetime
 
 

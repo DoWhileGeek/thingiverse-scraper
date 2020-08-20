@@ -8,7 +8,9 @@ import ray
 
 from models import Thing
 
-CHUNK_SIZE = 200
+START_ID = 1
+END_ID = 20
+CHUNK_SIZE = 20
 
 ray.init()
 
@@ -30,6 +32,7 @@ def make_dir(path):
 
 
 def get_headers(thing_id=2):
+    print("getting headers to scrape api like a cheater")
     chrome_options = Options()
     chrome_options.add_argument("--headless")
 
@@ -49,6 +52,21 @@ def get_headers(thing_id=2):
 
     finally:
         driver.quit()
+
+
+def download_images(thing_id, images):
+    path = f"things/{thing_id}/images"
+    make_dir(path)
+
+    for image in images:
+        for version in image["sizes"]:
+            if version["type"] == "display" and version["size"] == "large":
+                resp = requests.get(version["url"])
+                print(resp)
+
+                with open(path + "/" + version["url"].split("/")[-1], "wb+") as f:
+                    f.write(resp.content)
+
 
 
 def download_models(thing_id, models):
@@ -89,6 +107,7 @@ def fetch(thing_id, headers):
         resp = requests.get(task["url"], headers=headers)
 
         if resp.status_code != 200:
+            print(thing_id, task["api_url"], resp.status_code)
             continue
 
         with open(f"things/{thing_id}/{task['filename']}", "w+") as f:
@@ -96,6 +115,8 @@ def fetch(thing_id, headers):
 
         if "files" in task["filename"]:
             download_models(thing_id, resp.json())
+        if "images" in task["filename"]:
+            download_images(thing_id, resp.json())
 
     return {
         "id": thing_id,
@@ -111,7 +132,7 @@ def main():
     headers = get_headers()
 
     query = Thing.select(Thing.id).order_by(Thing.id.desc()).limit(1)
-    last_id = query[0].id
+    last_id = 1 or query[0].id
     print(last_id)
 
     chunks = list(range(last_id + 1, last_id + 1 + CHUNK_SIZE))
@@ -123,4 +144,21 @@ def main():
     Thing.insert_many(results).execute()
 
 
-main()
+def chunky_main():
+    make_dir("things")
+
+    chunks = []
+    for chunk_start in range(START_ID, END_ID, CHUNK_SIZE):
+        chunks.append(list(range(chunk_start, chunk_start+CHUNK_SIZE)))
+
+    for chunk in chunks:
+        headers = get_headers()
+
+        futures = [fetch.remote(thing_id, headers) for thing_id in chunk]
+
+        results = ray.get(futures)
+
+        Thing.insert_many(results).execute()
+
+
+chunky_main()
